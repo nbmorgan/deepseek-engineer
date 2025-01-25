@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 
 import os
-import sys
 import json
 from pathlib import Path
 from textwrap import dedent
 from typing import List, Dict, Any, Optional
 from ollama import chat
 from pydantic import BaseModel
-from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -16,7 +14,10 @@ from rich.style import Style
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style as PromptStyle
 
+# Ollama settings
 OLLAMA_MODEL = "deepseek-r1"
+CONTEXT_LENGTH = 8192
+
 
 # Initialize Rich console and prompt session
 console = Console()
@@ -27,11 +28,6 @@ prompt_session = PromptSession(
         }
     )
 )
-
-# --------------------------------------------------------------------------------
-# 1. Configure OpenAI client and load environment variables
-# --------------------------------------------------------------------------------
-load_dotenv()  # Load environment variables from .env file
 
 
 # --------------------------------------------------------------------------------
@@ -576,7 +572,7 @@ def stream_openai_response(user_message: str):
             messages=conversation_history,
             format="",  #'json'
             stream=True,
-            options={"temperature": 0, "num_ctx": 8192},
+            options={"temperature": 0, "num_ctx": CONTEXT_LENGTH},
         )
 
         console.print("\nThinking...", style="bold yellow")
@@ -716,7 +712,7 @@ def recover_json_AI(final_content) -> str:
         messages=conversation_history,
         format="",  #'json'
         stream=True,
-        options={"temperature": 0, "num_ctx": 8192},
+        options={"temperature": 0, "num_ctx": CONTEXT_LENGTH},
     )
 
     response = ""
