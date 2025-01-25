@@ -63,7 +63,7 @@ system_PROMPT = dedent(
     You are an elite software engineer called DeepSeek Engineer with decades of experience across all programming domains.
     Your expertise spans system design, algorithms, testing, and best practices.
     You provide thoughtful, well-structured solutions while explaining your reasoning.
-    You always answer in a JSON.
+    You always answer using a valid JSON.
     
     #  Core capabilities:
     1. Code Analysis & Discussion
@@ -576,6 +576,7 @@ def stream_openai_response(user_message: str):
             messages=conversation_history,
             format="",  #'json'
             stream=True,
+            options={"temperature": 0, "num_ctx": 8192},
         )
 
         console.print("\nThinking...", style="bold yellow")
@@ -603,11 +604,22 @@ def stream_openai_response(user_message: str):
         console.print()  # New line after streaming
 
         try:
-            try:
-                parsed_response = json.loads(final_content)
-            except:
-                final_content = extract_json_string(final_content)
-                parsed_response = json.loads(final_content)
+            for attempt in range(1, 4):
+                try:
+                    if attempt == 1:
+                        parsed_response = json.loads(final_content)
+                    elif attempt == 2:
+                        final_content = extract_json_string(final_content)
+                        parsed_response = json.loads(final_content)
+                    elif attempt == 3:
+                        console.print("Parsing result:", style="bold yellow")
+                        final_content = recover_json_AI(final_content)
+                        parsed_response = json.loads(final_content)
+                    break
+                except:
+                    print(f"Attempt {attempt} failed")
+                    if attempt == 3:
+                        raise json.JSONDecodeError
 
             if "assistant_reply" not in parsed_response:
                 parsed_response["assistant_reply"] = ""
@@ -660,7 +672,64 @@ def extract_json_string(text):
     if start != -1 and end != -1 and start < end:
         return text[start : end + 1]
     else:
-        return None
+        return text
+
+
+def recover_json_AI(final_content) -> str:
+    system_prompt = """
+    # Role:
+        Read the following **instructions** and convert them to a valid JSON following the **Json_Schema**.
+        Only answer with a valid Json.
+        
+    # Json_Schema:
+        {
+        "assistant_reply": "Your main explanation or response",
+        "files_to_create": [
+            {
+            "path": "path/to/new/file",
+            "content": "complete file content"
+            }
+        ],
+        "files_to_edit": [
+            {
+            "path": "path/to/existing/file",
+            "original_snippet": "exact code to be replaced",
+            "new_snippet": "new code to insert"
+            }
+        ]
+        }
+    """
+    user_prompt = dedent(
+        f"""
+    <instructions>
+    {final_content}
+    </instructions>
+    """
+    )
+
+    conversation_history = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    stream = chat(
+        model=OLLAMA_MODEL,
+        messages=conversation_history,
+        format="",  #'json'
+        stream=True,
+        options={"temperature": 0, "num_ctx": 8192},
+    )
+
+    response = ""
+    for chunk in stream:
+        console.print(chunk["message"]["content"], end="")
+        response += chunk["message"]["content"]
+    console.print()  # New line after streaming
+    if "</think>" in response:
+        response = (
+            response[response.rfind("</think>") :].replace("</think>", "").lstrip()
+        )
+        response = extract_json_string(response)
+    return response
 
 
 def trim_conversation_history():
